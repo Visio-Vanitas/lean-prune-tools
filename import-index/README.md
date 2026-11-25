@@ -1,6 +1,6 @@
 # `import-index`
 
-Zero-dependency Python 3.9+ tools for maintaining a fast, incremental SQLite module import-graph index over large Lean 4 repositories (~61k+ `.lean` files under `src/`) without building `.olean` artifacts. (See [root README](../README.md) and [MIT License](../LICENSE).)
+Zero-dependency Python 3.9+ tools for maintaining a fast, incremental SQLite module import-graph index over large Lean 4 repositories (~61k+ `.lean` files under `src/`) without building `.olean` artifacts. (See [root README](../README.md) and [Apache License 2.0](../LICENSE).)
 
 ## What Problem This Solves
 - **Incremental SQLite module index (`import_index.py`)**: Streams all `src/**/*.lean` blobs through `git cat-file --batch` (~4–10s full build, <0.5s incremental `sync`), handling nested `/- ... -/` block comments and `public`/`private`/`meta`/`import all` syntax.

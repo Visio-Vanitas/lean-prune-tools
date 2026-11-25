@@ -1,6 +1,6 @@
 /-
 Copyright (c) 2026
-Released under the MIT license as described in the file LICENSE.
+Released under Apache 2.0 license as described in the file LICENSE.
 
 Machine-checked formalization of the core graph-theoretic soundness invariants
 for `lean-dead-modules` in pure Lean 4 (`Init` only; zero Mathlib imports, zero `sorry`):

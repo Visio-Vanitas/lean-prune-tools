@@ -1,6 +1,6 @@
 # `olean-prune`
 
-Compiled constant-graph dead-module detection, dependency-closed fixpoint refinement (`closeD`), public-import splicing (`del_dead2`), and chunk-independent splitting (`split`) for large Lean 4 repositories. (See [root README](../README.md) and [MIT License](../LICENSE).)
+Compiled constant-graph dead-module detection, dependency-closed fixpoint refinement (`closeD`), public-import splicing (`del_dead2`), and chunk-independent splitting (`split`) for large Lean 4 repositories. (See [root README](../README.md) and [Apache License 2.0](../LICENSE).)
 
 ## What Problem This Solves
 1. **Exact constant-graph reachability (`Dump.lean`, `extract.py`, `load.py`, `reach.py`)**:
