@@ -105,7 +105,7 @@ def run_close_d(
         B -= set(read_nonempty_lines(hard_file))
     no_relax = set(read_nonempty_lines(no_relax_file)) if (no_relax_file and no_relax_file.is_file()) else set()
 
-    protected = parse_lakefile_roots(repo) | {"Main", "Statements", "Challenge"}
+    protected = parse_lakefile_roots(repo)
     if keep_roots:
         protected |= keep_roots
     B -= protected

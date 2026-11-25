@@ -5,7 +5,7 @@ Zero-dependency Python 3.9+ tools for maintaining a fast, incremental SQLite mod
 ## What Problem This Solves
 - **Incremental SQLite module index (`import_index.py`)**: Streams all `src/**/*.lean` blobs through `git cat-file --batch` (~4–10s full build, <0.5s incremental `sync`), handling nested `/- ... -/` block comments and `public`/`private`/`meta`/`import all` syntax.
 - **Millisecond structural queries (`import_index.py`)**:
-  - `rev`: direct importers and transitive reverse cone (all the way to `Main` / `Statements` / `Challenge`).
+  - `rev`: direct importers and transitive reverse cone (checking reachability to configured root modules).
   - `cycle`: cycle check before adding `src -> dst`.
   - `peel`: fixed-point orphan cascade computation when severing imports or dropping subtrees (`--check-symbols` inspects Lean sources for secondary exported symbol references).
   - `audit-diff`: `<1s` branch diff verification checking dangling imports across untouched files, import cycles, `git merge-tree` cleanliness, protected files, `sorry`/`admit`/`axiom`, and optional `--forbid-pattern` / `--forbid-file` rules.
@@ -20,8 +20,8 @@ Zero-dependency Python 3.9+ tools for maintaining a fast, incremental SQLite mod
 ## Quickstart
 
 ```bash
-# 1. Build or incrementally sync the SQLite import index (stored at ~/.cache/rh-import-index/import_index.db by default)
-python3 import_index.py --repo /path/to/riemann-hypothesis sync --ref origin/main
+# 1. Build or incrementally sync the SQLite import index (stored at ~/.cache/lean-import-index/import_index.db by default)
+python3 import_index.py --repo /path/to/lean-project sync --ref origin/main
 
 # 2. Check index metadata and remote freshness
 python3 import_index.py stats --check-remote
@@ -35,7 +35,7 @@ python3 import_index.py peel HostModule --drop DepA,DepB --check-symbols
 python3 import_index.py peel --drop-modules Mod1,Mod2 --mode reach-main
 
 # 5. Audit a branch diff before opening or updating a PR
-python3 import_index.py --repo /path/to/riemann-hypothesis audit-diff origin/main HEAD
+python3 import_index.py --repo /path/to/lean-project audit-diff origin/main HEAD
 ```
 
 ## Cleanup Scanners & Planners

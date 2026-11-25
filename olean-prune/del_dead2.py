@@ -224,15 +224,10 @@ def apply_dead_deletions(
             sample = ", ".join(f"{m}->{t}" for m, t in dangling[:5])
             raise RuntimeError(f"Post-rewrite check found {len(dangling)} dangling project imports: {sample}")
 
-    ce_path = clump_exclude
-    if ce_path is None:
-        default_ce = repo / "scripts" / "clump-exclude.txt"
-        if default_ce.is_file():
-            ce_path = default_ce
-    if ce_path is not None and ce_path.is_file():
-        lines = ce_path.read_text(encoding="utf-8").splitlines()
+    if clump_exclude is not None and clump_exclude.is_file():
+        lines = clump_exclude.read_text(encoding="utf-8").splitlines()
         filtered = [ln for ln in lines if ln.strip() not in dead_mods]
-        ce_path.write_text("\n".join(filtered) + ("\n" if lines and filtered else ""), encoding="utf-8")
+        clump_exclude.write_text("\n".join(filtered) + ("\n" if lines and filtered else ""), encoding="utf-8")
 
     return edited, added, removed
 
@@ -241,7 +236,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Delete dead Lean modules and splice their public imports.")
     ap.add_argument("--repo", type=Path, required=True, help="Path to Lean project repository")
     ap.add_argument("--dead-list", type=Path, required=True, help="File listing dead module names (one per line)")
-    ap.add_argument("--clump-exclude", type=Path, default=None, help="Optional exclude file to prune")
+    ap.add_argument(
+        "--exclude-file",
+        "--clump-exclude",
+        dest="exclude_file",
+        type=Path,
+        default=None,
+        help="Optional exclude list file from which deleted modules should also be pruned",
+    )
     ap.add_argument("--no-verify", action="store_true", help="Skip post-rewrite missing project import verification")
     args = ap.parse_args()
 
@@ -249,7 +251,7 @@ def main() -> int:
     edited, added, removed = apply_dead_deletions(
         args.repo.resolve(),
         dead_mods,
-        args.clump_exclude,
+        args.exclude_file,
         verify=not args.no_verify,
     )
     print(f"{edited} importers edited, {added} imports added, {removed} files removed")

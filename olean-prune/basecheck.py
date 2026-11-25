@@ -11,7 +11,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from quickcheck import DEFAULT_LEAN_OPTS, lean_opts_for_file
+from quickcheck import DEFAULT_LEAN_OPTS, lean_opts_for_file, parse_prefix_opts
 
 
 def _fails_from_qc_json(qc_json: Path) -> list[str]:
@@ -39,6 +39,7 @@ def run_basecheck(
     timeout: int = 1800,
     out_json: Path | None = None,
     base_ref: str = "HEAD",
+    prefix_opts: list[tuple[str, str]] | None = None,
 ) -> list[dict[str, object]]:
     env = dict(os.environ)
     lp = subprocess.run(
@@ -54,7 +55,7 @@ def run_basecheck(
     def eval_one(rel: str, target_path: str) -> tuple[str, list[str]]:
         try:
             r = subprocess.run(
-                ["lean"] + lean_opts_for_file(rel, DEFAULT_LEAN_OPTS) + [target_path],
+                ["lean"] + lean_opts_for_file(rel, DEFAULT_LEAN_OPTS, prefix_opts) + [target_path],
                 cwd=str(repo),
                 capture_output=True,
                 text=True,
@@ -120,6 +121,7 @@ def main() -> int:
     ap.add_argument("--jobs", type=int, default=4, help="Parallel Lean workers (default: 4)")
     ap.add_argument("--timeout", type=int, default=1800, help="Per-file timeout seconds (default: 1800)")
     ap.add_argument("--out-json", type=Path, default=None, help="Output basecheck JSON path")
+    ap.add_argument("--prefix-opt", action="append", default=None, help="Extra Lean flag for paths with prefix (PREFIX=FLAG)")
     args = ap.parse_args()
 
     if args.qc_json:
@@ -138,6 +140,7 @@ def main() -> int:
         timeout=args.timeout,
         out_json=out_json,
         base_ref=args.base_ref,
+        prefix_opts=parse_prefix_opts(args.prefix_opt),
     )
     return 0
 

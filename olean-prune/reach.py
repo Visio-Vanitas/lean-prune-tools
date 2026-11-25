@@ -7,9 +7,11 @@ import collections
 import sqlite3
 from pathlib import Path
 
+from lean_syntax import resolve_roots
+
 
 def compute_reach(db_path: Path, roots: set[str] | None = None) -> tuple[int, int, int]:
-    root_mods = roots if roots is not None else {"Main", "Statements"}
+    root_mods = roots if roots is not None else {"Main"}
     con = sqlite3.connect(str(db_path))
     try:
         cur = con.cursor()
@@ -41,10 +43,16 @@ def compute_reach(db_path: Path, roots: set[str] | None = None) -> tuple[int, in
 def main() -> int:
     ap = argparse.ArgumentParser(description="Compute forward reachability from root modules in decl_graph.db.")
     ap.add_argument("--db", type=Path, required=True, help="Path to decl_graph.db")
-    ap.add_argument("--roots", default="Main,Statements", help="Comma-separated root module names (default: Main,Statements)")
+    ap.add_argument("--repo", type=Path, default=None, help="Optional repo path to auto-detect lakefile roots")
+    ap.add_argument("--roots", default="", help="Comma-separated root modules (default: lakefile roots or Main)")
     args = ap.parse_args()
 
-    roots = {r.strip() for r in args.roots.split(",") if r.strip()}
+    if args.roots.strip():
+        roots = {r.strip() for r in args.roots.split(",") if r.strip()}
+    elif args.repo is not None:
+        roots = resolve_roots(args.repo.resolve(), "")
+    else:
+        roots = {"Main"}
     n_roots, n_seen, n_total = compute_reach(args.db.resolve(), roots)
     print(f"roots={n_roots} reached={n_seen} of total={n_total}")
     return 0

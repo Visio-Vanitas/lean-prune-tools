@@ -13,8 +13,6 @@ OPEN_EXPORT_LINE_RE = re.compile(r"^\s*(?:@\[[^\]]*\]\s*)?(?:open|export)\s+(?:s
 IDENT_RE = re.compile(r"[A-Za-z_\u0370-\u03ff][\w.'!?\u2080-\u2089\u0370-\u03ff]*")
 OPEN_TOK_RE = re.compile(r"^[A-Za-z_\u0370-\u03ff][\w.'\u2080-\u2089\u0370-\u03ff]*$")
 
-LAKEFILE_ROOTS_RE = re.compile(r"^roots\s*=\s*\[(.*?)\]", re.MULTILINE)
-
 
 def read_nonempty_lines(path: Path) -> list[str]:
     return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -199,14 +197,39 @@ def parse_lean_imports(text: str) -> list[ImportSpec]:
     return specs
 
 
+LAKEFILE_ROOTS_RE = re.compile(r"^roots\s*=\s*\[(.*?)\]", re.MULTILINE | re.DOTALL)
+LAKEFILE_ROOT_RE = re.compile(r'^root\s*=\s*"([^"]+)"', re.MULTILINE)
+LAKEFILE_LEAN_ROOTS_RE = re.compile(r"roots\s*:=\s*#\[(.*?)\]", re.DOTALL)
+LAKEFILE_LEAN_ROOT_RE = re.compile(r'root\s*:=\s*(?:`([A-Za-z0-9_.]+)|"([^"]+)")')
+
+
 def parse_lakefile_roots(repo: Path) -> set[str]:
-    lf = repo / "lakefile.toml"
-    if not lf.is_file():
-        return {"Main", "Statements"}
-    txt = lf.read_text(encoding="utf-8", errors="replace")
-    roots = {
-        x
-        for block in LAKEFILE_ROOTS_RE.findall(txt)
-        for x in re.findall(r'"([^"]+)"', block)
-    }
-    return roots or {"Main", "Statements"}
+    """Auto-discover root modules from lakefile.toml / lakefile.lean, defaulting to {'Main'}."""
+    roots: set[str] = set()
+    toml_path = repo / "lakefile.toml"
+    if toml_path.is_file():
+        txt = toml_path.read_text(encoding="utf-8", errors="replace")
+        for block in LAKEFILE_ROOTS_RE.findall(txt):
+            roots.update(re.findall(r'"([^"]+)"', block))
+        roots.update(LAKEFILE_ROOT_RE.findall(txt))
+
+    lean_path = repo / "lakefile.lean"
+    if lean_path.is_file():
+        txt = strip_lean_comments(lean_path.read_text(encoding="utf-8", errors="replace"))
+        for block in LAKEFILE_LEAN_ROOTS_RE.findall(txt):
+            for tok in re.findall(r'`([A-Za-z0-9_.]+)|"([^"]+)"', block):
+                mod = tok[0] or tok[1]
+                if mod:
+                    roots.add(mod)
+        for m in LAKEFILE_LEAN_ROOT_RE.findall(txt):
+            mod = m[0] or m[1]
+            if mod:
+                roots.add(mod)
+
+    return roots or {"Main"}
+
+
+def resolve_roots(repo: Path, roots_arg: str = "") -> set[str]:
+    if roots_arg.strip():
+        return {r.strip() for r in roots_arg.split(",") if r.strip()}
+    return parse_lakefile_roots(repo)

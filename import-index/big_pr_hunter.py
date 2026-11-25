@@ -3012,11 +3012,13 @@ def cmd_unreferenced_decls(args: argparse.Namespace) -> int:
     pref_mod = idx.path_to_mod(pref) if (pref.startswith("src/") or "/" in pref or pref.endswith(".lean")) else pref.strip(".")
     max_cone = (10 if not pref_mod else 0) if args.max_cone < 0 else args.max_cone
     main_reach = idx.reachable_from(["Main"], mods, fwd, set()) if args.main_only and "Main" in mods else None
-    redline_mods = {"Main", "Statements", "Challenge"}
+    protected_mods = {"Main"} | {
+        r.strip() for r in getattr(args, "keep_roots", "").split(",") if r.strip()
+    }
 
     targets: list[str] = []
     for m, (p, _) in mods.items():
-        if m in redline_mods:
+        if m in protected_mods:
             continue
         if main_reach is not None and m not in main_reach:
             continue
@@ -3167,8 +3169,8 @@ def cmd_unreferenced_decls(args: argparse.Namespace) -> int:
 def main() -> int:
     idx.ensure_utf8_stdio()
     ap = argparse.ArgumentParser(description="SQLite-backed Big-PR opportunity hunter for continuous local search.")
-    ap.add_argument("--repo", type=Path, default=None, help="Path to local riemann-hypothesis git checkout (defaults to indexed repo_root or cwd)")
-    ap.add_argument("--db", type=Path, default=Path.home() / ".cache" / "rh-import-index" / "import_index.db")
+    ap.add_argument("--repo", type=Path, default=None, help="Path to local Lean 4 git repository (defaults to indexed repo_root or cwd)")
+    ap.add_argument("--db", type=Path, default=Path.home() / ".cache" / "lean-import-index" / "import_index.db")
     ap.add_argument("--ref", default="origin/main")
     sub = ap.add_subparsers(dest="cmd", required=True)
 

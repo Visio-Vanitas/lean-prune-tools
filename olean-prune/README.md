@@ -4,7 +4,7 @@ Compiled constant-graph dead-module detection, dependency-closed fixpoint refine
 
 ## What Problem This Solves
 1. **Exact constant-graph reachability (`Dump.lean`, `extract.py`, `load.py`, `reach.py`)**:
-   Reads `.olean`, `.olean.server`, and `.olean.private` (including proof terms and private declarations) via `Lean.readModuleDataParts`, and marks everything reachable from `Main` and `Statements`.
+   Reads `.olean`, `.olean.server`, and `.olean.private` (including proof terms and private declarations) via `Lean.readModuleDataParts`, and marks everything reachable from the configured root modules (`--roots`, auto-detected from `lakefile.toml` / `lakefile.lean` by default).
 2. **Dependency-closed fixpoint (`closeD.py`)**:
    Refines candidates over dependencies invisible to plain constant reachability:
    - hard constant edges originating from dead code inside kept modules;
@@ -32,19 +32,19 @@ Compiled constant-graph dead-module detection, dependency-closed fixpoint refine
 ## Quickstart
 
 ```bash
-# 1. Extract external namespaces + exact .olean constant graph into ./work
-python3 pipeline.py --repo /path/to/riemann-hypothesis --work-dir ./work extract --jobs 8 --force
+# 1. Extract external namespaces + exact .olean constant graph into ./work (roots auto-detected from lakefile)
+python3 pipeline.py --repo /path/to/lean-project --work-dir ./work extract --jobs 8 --force
 
 # 2. Compute fixpoint-closed deletion set and open-line relaxations
-python3 pipeline.py --repo /path/to/riemann-hypothesis --work-dir ./work close
+python3 pipeline.py --repo /path/to/lean-project --work-dir ./work close
 
 # 3. Apply the full patch OR split into independent per-directory chunk diffs
-python3 pipeline.py --repo /path/to/riemann-hypothesis --work-dir ./work split --max-chunk 40 --adaptive-depth
-python3 pipeline.py --repo /path/to/riemann-hypothesis --work-dir ./work chunks --max-chunk 40 --adaptive-depth --allow-reset
+python3 pipeline.py --repo /path/to/lean-project --work-dir ./work split --max-chunk 40 --adaptive-depth
+python3 pipeline.py --repo /path/to/lean-project --work-dir ./work chunks --max-chunk 40 --adaptive-depth --allow-reset
 
 # 4. Run selective elaboration checks on modified files (stdlib-only Clopper-Pearson CI)
-python3 quickcheck.py --repo /path/to/riemann-hypothesis --sample 400 --jobs 6 --out-json ./work/qc.json
-python3 basecheck.py --repo /path/to/riemann-hypothesis --qc-json ./work/qc.json --out-json ./work/basecheck.json
+python3 quickcheck.py --repo /path/to/lean-project --sample 400 --jobs 6 --out-json ./work/qc.json
+python3 basecheck.py --repo /path/to/lean-project --qc-json ./work/qc.json --out-json ./work/basecheck.json
 ```
 
 See [DERIVATION_AND_REVIEW.md](DERIVATION_AND_REVIEW.md) for the mathematical soundness derivation and code review notes.

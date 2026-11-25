@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 
 from ext_ns import find_lean_exe
-from lean_syntax import discover_src_modules, parse_lakefile_roots, parse_lean_imports, write_lines
+from lean_syntax import discover_src_modules, parse_lakefile_roots, parse_lean_imports, resolve_roots, write_lines
 from load import load_tsv_to_db
 from reach import compute_reach
 from seed_cache import _hh, olean_cache_key
@@ -205,15 +205,15 @@ def main() -> int:
         default=Path(__file__).resolve().parent / "Dump.lean",
         help="Path to Dump.lean",
     )
-    ap.add_argument("--roots", default="Main,Statements", help="Comma-separated reachability roots (default: Main,Statements)")
+    ap.add_argument("--roots", default="", help="Comma-separated reachability roots (default: auto-detect from lakefile)")
     ap.add_argument("--keep-roots", default="", help="Extra comma-separated modules never deleted")
     ap.add_argument("--jobs", type=int, default=8, help="Parallel extractor workers (default: 8)")
     ap.add_argument("--force", action="store_true", help="Continue even if some closure modules lack DB rows")
     args = ap.parse_args()
 
     repo = args.repo.resolve()
-    roots = {r.strip() for r in args.roots.split(",") if r.strip()}
-    keep_roots = parse_lakefile_roots(repo) | roots | {"Main", "Statements", "Challenge"}
+    roots = resolve_roots(repo, args.roots)
+    keep_roots = parse_lakefile_roots(repo) | roots
     if args.keep_roots:
         keep_roots |= {r.strip() for r in args.keep_roots.split(",") if r.strip()}
 

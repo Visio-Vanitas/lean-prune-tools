@@ -69,7 +69,8 @@ def _build_synthetic_graph(
 
     db_path = work_dir / "olean" / "decl_graph.db"
     ld.load_tsv_to_db(deps_dir, db_path)
-    reach.compute_reach(db_path, {"Main", "Statements"})
+    roots = ls.resolve_roots(repo)
+    reach.compute_reach(db_path, roots)
 
     con = sqlite3.connect(str(db_path))
     try:
@@ -79,7 +80,7 @@ def _build_synthetic_graph(
     finally:
         con.close()
 
-    keep_roots = ls.parse_lakefile_roots(repo) | {"Main", "Statements", "Challenge"}
+    keep_roots = ls.parse_lakefile_roots(repo) | roots
     cands = sorted(m for m in mods if m not in live_mods and m not in keep_roots)
     cand_file = work_dir / "cand.txt"
     cand_file.write_text("\n".join(cands) + ("\n" if cands else ""), encoding="utf-8")
@@ -133,8 +134,40 @@ class TestLeanSyntaxAndLoader(unittest.TestCase):
             db_path = work / "olean" / "decl_graph.db"
             n_decls, n_edges, n_files = ld.load_tsv_to_db(deps_dir, db_path)
             self.assertEqual((n_decls, n_edges, n_files), (4, 2, 1))
-            n_roots, n_seen, n_total = reach.compute_reach(db_path, {"Main", "Statements"})
+            n_roots, n_seen, n_total = reach.compute_reach(db_path, {"Main"})
             self.assertEqual((n_roots, n_seen, n_total), (1, 2, 4))
+
+    def test_parse_lakefile_roots_toml_and_lean_and_resolve(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            toml_repo = root / "toml_repo"
+            toml_repo.mkdir()
+            (toml_repo / "lakefile.toml").write_text(
+                'roots = ["CoreLib", "CoreLib.Extra"]\nroot = "AppEntry"\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(ls.parse_lakefile_roots(toml_repo), {"CoreLib", "CoreLib.Extra", "AppEntry"})
+            self.assertEqual(ls.resolve_roots(toml_repo, "CustomA,CustomB"), {"CustomA", "CustomB"})
+
+            lean_repo = root / "lean_repo"
+            lean_repo.mkdir()
+            (lean_repo / "lakefile.lean").write_text(
+                "\n".join(
+                    [
+                        "-- root := `CommentedOut",
+                        "lean_lib MyPkg where",
+                        "  roots := #[`MyPkg, `MyPkg.API]",
+                        "lean_exe cli where",
+                        "  root := `CliMain",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(ls.parse_lakefile_roots(lean_repo), {"MyPkg", "MyPkg.API", "CliMain"})
+
+            empty_repo = root / "empty_repo"
+            empty_repo.mkdir()
+            self.assertEqual(ls.parse_lakefile_roots(empty_repo), {"Main"})
 
 
 class TestCloseD(unittest.TestCase):
@@ -145,16 +178,16 @@ class TestCloseD(unittest.TestCase):
             work = root / "work"
 
             files = {
-                "lakefile.toml": 'roots = ["Main", "Statements", "Challenge"]\n',
-                "src/Main.lean": "\n".join(
+                "lakefile.toml": 'roots = ["MyLib", "MyLib.App"]\nroot = "ExtraRoot"\n',
+                "src/MyLib.lean": "\n".join(
                     [
                         "import KeptLive",
                         "import UnreachedLive",
                         "theorem mainThm : True := UnreachedLive.liveUsed KeptLive.k",
                     ]
                 ),
-                "src/Statements.lean": "theorem stmt : True := trivial\n",
-                "src/Challenge.lean": "theorem chal : True := sorry\n",
+                "src/MyLib/App.lean": "theorem app : True := trivial\n",
+                "src/ExtraRoot.lean": "theorem extra : True := sorry\n",
                 "src/KeptLive.lean": "\n".join(
                     [
                         "import PolyApproxCut",
@@ -210,9 +243,9 @@ class TestCloseD(unittest.TestCase):
             }
 
             names_rows = [
-                ("Main", "thm", "Main.mainThm"),
-                ("Statements", "thm", "Statements.stmt"),
-                ("Challenge", "thm", "Challenge.chal"),
+                ("MyLib", "thm", "MyLib.mainThm"),
+                ("MyLib.App", "thm", "MyLib.App.app"),
+                ("ExtraRoot", "thm", "ExtraRoot.extra"),
                 ("KeptLive", "def", "KeptLive.k"),
                 ("UnreachedLive", "def", "UnreachedLive.liveUsed"),
                 ("UnreachedLive", "def", "UnreachedLive.deadInLive"),
@@ -232,9 +265,9 @@ class TestCloseD(unittest.TestCase):
                 ("GhostCand", "def", "GhostNS.g"),
             ]
             deps_rows = [
-                ("Main", "full", "thm", "Main.mainThm", ["KeptLive.k", "UnreachedLive.liveUsed"]),
-                ("Statements", "full", "thm", "Statements.stmt", []),
-                ("Challenge", "full", "thm", "Challenge.chal", []),
+                ("MyLib", "full", "thm", "MyLib.mainThm", ["KeptLive.k", "UnreachedLive.liveUsed"]),
+                ("MyLib.App", "full", "thm", "MyLib.App.app", []),
+                ("ExtraRoot", "full", "thm", "ExtraRoot.extra", []),
                 ("KeptLive", "full", "def", "KeptLive.k", []),
                 ("UnreachedLive", "full", "def", "UnreachedLive.liveUsed", []),
                 ("UnreachedLive", "full", "def", "UnreachedLive.deadInLive", ["HardConstCand.hc"]),
@@ -278,9 +311,9 @@ class TestCloseD(unittest.TestCase):
             # Must KEEP all modules protected by hard edges, selective open, relative open,
             # hiding/renaming, non-inert zero-const, export, scoped, and live open+textref providers.
             for must_keep in (
-                "Main",
-                "Statements",
-                "Challenge",
+                "MyLib",
+                "MyLib.App",
+                "ExtraRoot",
                 "HardConstCand",
                 "TextRefCand",
                 "PolyApproxCut",

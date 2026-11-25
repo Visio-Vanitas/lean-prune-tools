@@ -12,7 +12,7 @@ from closeD import run_close_d
 from del_dead2 import apply_dead_deletions
 from ext_ns import extract_external_namespaces
 from extract import run_extract
-from lean_syntax import parse_lakefile_roots
+from lean_syntax import parse_lakefile_roots, resolve_roots
 from quickcheck import run_quickcheck
 from split import split_dead_set
 
@@ -35,7 +35,7 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p_ext = sub.add_parser("extract", help="Extract external namespaces and constant graph DB")
-    p_ext.add_argument("--roots", default="Main,Statements")
+    p_ext.add_argument("--roots", default="", help="Comma-separated roots (default: auto-detect from lakefile)")
     p_ext.add_argument("--jobs", type=int, default=8)
     p_ext.add_argument("--force", action="store_true")
     p_ext.add_argument("--skip-ext-ns", action="store_true")
@@ -70,8 +70,8 @@ def main() -> int:
     dump_lean = Path(__file__).resolve().parent / "Dump.lean"
 
     if args.cmd == "extract":
-        roots = {r.strip() for r in args.roots.split(",") if r.strip()}
-        keep_roots = parse_lakefile_roots(repo) | roots | {"Main", "Statements", "Challenge"}
+        roots = resolve_roots(repo, args.roots)
+        keep_roots = parse_lakefile_roots(repo) | roots
         if not args.skip_ext_ns:
             extract_external_namespaces(repo, work / "ext_ns.txt", dump_lean, jobs=args.jobs)
         return run_extract(repo, work, dump_lean, roots, keep_roots, jobs=args.jobs, force=args.force)

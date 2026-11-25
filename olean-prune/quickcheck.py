@@ -20,10 +20,25 @@ DEFAULT_LEAN_OPTS = [
     "-Dpp.unicode.fun=true",
     "-DmaxHeartbeats=4000000",
 ]
-EXTRA_SYNTH_PREFIXES = (
-    "src/GroundTheory/LocalFields/",
-    "src/GroundTheory/GlobalFields/",
-)
+
+
+def parse_prefix_opts(raw_items: list[str] | None) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for item in raw_items or ():
+        if "=" not in item:
+            raise ValueError(f"Expected PREFIX=FLAG for --prefix-opt, got {item!r}")
+        pref, flag = item.split("=", 1)
+        out.append((pref.strip(), flag.strip()))
+    return out
+
+
+def lean_opts_for_file(
+    rel_path: str,
+    base_opts: list[str],
+    prefix_opts: list[tuple[str, str]] | None = None,
+) -> list[str]:
+    extra = [flag for pref, flag in (prefix_opts or ()) if rel_path.startswith(pref)]
+    return list(base_opts) + extra
 
 
 def _binom_cdf_le(x: int, n: int, p: float) -> float:
@@ -82,12 +97,6 @@ def clopper_pearson_ci(x: int, n: int, alpha: float = 0.05) -> tuple[float, floa
     return lo, hi
 
 
-def lean_opts_for_file(rel_path: str, base_opts: list[str]) -> list[str]:
-    if rel_path.startswith(EXTRA_SYNTH_PREFIXES):
-        return base_opts + ["-DsynthInstance.maxHeartbeats=400000"]
-    return list(base_opts)
-
-
 def run_quickcheck(
     repo: Path,
     *,
@@ -98,6 +107,7 @@ def run_quickcheck(
     out_json: Path | None = None,
     files: list[str] | None = None,
     lean_opts: list[str] | None = None,
+    prefix_opts: list[tuple[str, str]] | None = None,
 ) -> dict[str, object]:
     if files is None:
         r = subprocess.run(
@@ -129,7 +139,7 @@ def run_quickcheck(
     def check_one(rel: str) -> tuple[str, str, list[str]]:
         try:
             r = subprocess.run(
-                ["lean"] + lean_opts_for_file(rel, base_opts) + [rel],
+                ["lean"] + lean_opts_for_file(rel, base_opts, prefix_opts) + [rel],
                 cwd=str(repo),
                 capture_output=True,
                 text=True,
@@ -181,6 +191,7 @@ def main() -> int:
     ap.add_argument("--timeout", type=int, default=1200, help="Per-file timeout seconds (default: 1200)")
     ap.add_argument("--out-json", type=Path, default=None, help="Output JSON report path")
     ap.add_argument("--lean-opt", action="append", default=None, help="Override base Lean flags (repeatable)")
+    ap.add_argument("--prefix-opt", action="append", default=None, help="Extra Lean flag for paths with prefix (PREFIX=FLAG)")
     args = ap.parse_args()
 
     out_json = args.out_json.resolve() if args.out_json else Path("qc_sample.json").resolve()
@@ -192,6 +203,7 @@ def main() -> int:
         timeout=args.timeout,
         out_json=out_json,
         lean_opts=args.lean_opt,
+        prefix_opts=parse_prefix_opts(args.prefix_opt),
     )
     return 0
 

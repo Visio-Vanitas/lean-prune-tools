@@ -704,8 +704,8 @@ def cmd_unused_imports(args: argparse.Namespace) -> int:
 def main() -> int:
     idx.ensure_utf8_stdio()
     ap = argparse.ArgumentParser(description="Proof-stripping blueprint & verification planner.")
-    ap.add_argument("--repo", type=Path, default=None, help="Path to local riemann-hypothesis git checkout")
-    ap.add_argument("--db", type=Path, default=Path.home() / ".cache" / "rh-import-index" / "import_index.db")
+    ap.add_argument("--repo", type=Path, default=None, help="Path to local Lean 4 git repository")
+    ap.add_argument("--db", type=Path, default=Path.home() / ".cache" / "lean-import-index" / "import_index.db")
     ap.add_argument("--ref", default="origin/main")
     sub = ap.add_subparsers(dest="cmd", required=True)
 

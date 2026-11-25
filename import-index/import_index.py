@@ -40,18 +40,22 @@ SCHEMA_VERSION = "3"
 IMPORT_RE = re.compile(r"^\s*(?:(?:public|private|meta)\s+)*import\s+(?:all\s+)?([^\s\-]+)")
 
 PROTECTED_FILES = {
-    "src/Main.lean",
-    "src/Statements.lean",
-    "src/Challenge.lean",
     "lakefile.toml",
+    "lakefile.lean",
     "lean-toolchain",
     "lake-manifest.json",
-    "comparator.json",
-    "export-targets.txt",
-    "comparator/FormalConjecturesChallenge.lean",
-    "comparator/formal-conjectures.json",
-    "comparator/formal-conjectures-export-targets.txt",
 }
+
+
+def load_protected_files(paths: list[str], protected_files_lists: list[Path]) -> set[str]:
+    out = set(PROTECTED_FILES)
+    out.update(p.strip() for p in paths if p.strip())
+    for fp in protected_files_lists:
+        for line in fp.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if s and not s.startswith("#"):
+                out.add(s)
+    return out
 
 
 def load_forbidden_patterns(patterns: list[str], forbid_files: list[Path]) -> list[re.Pattern[str]]:
@@ -898,6 +902,8 @@ def cmd_rev(args: argparse.Namespace) -> int:
                 cone.add(p)
                 q.append(p)
     cone_sorted = sorted(cone)
+    roots_arg = getattr(args, "roots", "")
+    roots = [r.strip() for r in roots_arg.split(",") if r.strip()] if roots_arg else ["Main"]
     out = {
         "indexed_commit": get_meta(conn, "commit")[:10],
         "module": target,
@@ -907,8 +913,7 @@ def cmd_rev(args: argparse.Namespace) -> int:
         "direct_importers": direct[:50],
         "reverse_cone_count": len(cone_sorted),
         "reaches_Main": "Main" in cone,
-        "reaches_Statements": "Statements" in cone,
-        "reaches_Challenge": "Challenge" in cone,
+        "reaches_roots": {r: (r in cone) for r in roots},
         "reverse_cone": cone_sorted if len(cone_sorted) <= 80 else cone_sorted[:40] + [f"... (+{len(cone_sorted)-40} more)"],
     }
     print(json.dumps(out, indent=2))
@@ -1368,7 +1373,10 @@ def cmd_audit_diff(args: argparse.Namespace) -> int:
         getattr(args, "forbid_pattern", []),
         getattr(args, "forbid_file", []),
     )
-    protected_files = PROTECTED_FILES | set(getattr(args, "protected_file", []))
+    protected_files = load_protected_files(
+        getattr(args, "protected_file", []),
+        getattr(args, "protected_file_list", []),
+    )
     forbidden_hits: list[str] = []
     bad_tokens: list[str] = []
     clump_warnings: list[dict[str, Any]] = []
@@ -1442,8 +1450,8 @@ def cmd_audit_diff(args: argparse.Namespace) -> int:
 def main() -> int:
     ensure_utf8_stdio()
     ap = argparse.ArgumentParser(description="Fast local SQLite import-graph index & verifier for Lean repos.")
-    ap.add_argument("--repo", type=Path, default=None, help="Path to local riemann-hypothesis git checkout (defaults to indexed repo_root or cwd)")
-    ap.add_argument("--db", type=Path, default=Path.home() / ".cache" / "rh-import-index" / "import_index.db")
+    ap.add_argument("--repo", type=Path, default=None, help="Path to local Lean 4 git repository (defaults to indexed repo_root or cwd)")
+    ap.add_argument("--db", type=Path, default=Path.home() / ".cache" / "lean-import-index" / "import_index.db")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p_sync = sub.add_parser("sync", help="Build or incrementally sync SQLite index to --ref")
@@ -1461,6 +1469,7 @@ def main() -> int:
 
     p_rev = sub.add_parser("rev", help="Show direct importers & full reverse cone of a module")
     p_rev.add_argument("module")
+    p_rev.add_argument("--roots", default="Main", help="Comma-separated root modules to check reachability (default: Main)")
 
     p_cyc = sub.add_parser("cycle", help="Check if adding src -> dst creates an import cycle")
     p_cyc.add_argument("src")
@@ -1483,6 +1492,7 @@ def main() -> int:
     p_aud.add_argument("--forbid-pattern", action="append", default=[], help="Case-insensitive regex forbidden in added lines or commit messages (repeatable)")
     p_aud.add_argument("--forbid-file", type=Path, action="append", default=[], help="File of forbidden regexes (one per line, # comments ignored)")
     p_aud.add_argument("--protected-file", action="append", default=[], help="Additional repo-relative path that must remain untouched (repeatable)")
+    p_aud.add_argument("--protected-file-list", type=Path, action="append", default=[], help="File of protected repo-relative paths (one per line, # comments ignored)")
 
     args = ap.parse_args()
     return {
