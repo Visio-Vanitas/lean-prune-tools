@@ -330,6 +330,56 @@ class TestImportIndexAndAudit(unittest.TestCase):
         self.assertEqual(aud["dangling_imports_count"], 1)
         self.assertEqual(aud["dangling_sample"], [["HostA", "Dev.MissingOnBase"]])
 
+    def test_sync_and_stats_remote_ancestor_direction(self):
+        bare = self.root / "origin.git"
+        bare.mkdir()
+        _git(bare, "init", "--bare")
+        _git(self.repo, "remote", "add", "origin", str(bare))
+        _git(self.repo, "push", "-u", "origin", "main")
+
+        # Advance local HEAD ahead of origin/main
+        _commit_changes(
+            self.repo,
+            updates={"src/AheadOnly.lean": "theorem ahead : True := trivial\n"},
+            msg="local commit ahead of origin/main",
+        )
+        rc, out, err = _run_cli(
+            TOOLS_DIR / "import_index.py",
+            "--repo", str(self.repo),
+            "--db", str(self.db),
+            "sync", "--ref", "HEAD",
+        )
+        self.assertEqual(rc, 0, err)
+        res_ahead = json.loads(out)
+        self.assertFalse(res_ahead["stale_vs_remote"])
+        self.assertTrue(res_ahead.get("ahead_of_remote"))
+        self.assertNotIn("WARNING:", err)
+
+        rc_st, out_st, err_st = _run_cli(
+            TOOLS_DIR / "import_index.py",
+            "--repo", str(self.repo),
+            "--db", str(self.db),
+            "stats", "--check-remote",
+        )
+        self.assertEqual(rc_st, 0, err_st)
+        st_ahead = json.loads(out_st)
+        self.assertFalse(st_ahead["stale_vs_remote"])
+        self.assertTrue(st_ahead.get("ahead_of_remote"))
+
+        # Push local commit so HEAD~1 is genuinely behind origin/main
+        _git(self.repo, "push", "origin", "main")
+        rc_bh, out_bh, err_bh = _run_cli(
+            TOOLS_DIR / "import_index.py",
+            "--repo", str(self.repo),
+            "--db", str(self.db),
+            "sync", "--ref", "HEAD~1",
+        )
+        self.assertEqual(rc_bh, 0, err_bh)
+        res_behind = json.loads(out_bh)
+        self.assertTrue(res_behind["stale_vs_remote"])
+        self.assertNotIn("ahead_of_remote", res_behind)
+        self.assertIn("WARNING:", err_bh)
+
 
 class TestHunterAndPlanner(unittest.TestCase):
     def setUp(self):

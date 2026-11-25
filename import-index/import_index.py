@@ -779,6 +779,24 @@ def check_remote_main(repo: Path, remote: str = "origin", timeout: int = 8) -> s
     return ""
 
 
+def is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
+    if not ancestor or not descendant:
+        return False
+    if ancestor == descendant:
+        return True
+    try:
+        r = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def resolve_repo(args_repo: Path | None, db_path: Path | None = None) -> Path:
     if args_repo is not None:
         return args_repo.resolve()
@@ -838,16 +856,20 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
     if not args.no_remote_check:
         rem_sha = check_remote_main(repo, args.remote)
-        if rem_sha and rem_sha != target_sha:
-            res["stale_vs_remote"] = True
+        if rem_sha:
             res["remote_main"] = rem_sha[:10]
-            print(
-                f"WARNING: Indexed {args.ref} ({target_sha[:10]}) is behind {args.remote}/main ({rem_sha[:10]}). "
-                f"Re-run with `--fetch` to sync against live remote!",
-                file=sys.stderr,
-            )
-        elif rem_sha:
-            res["stale_vs_remote"] = False
+            if rem_sha == target_sha:
+                res["stale_vs_remote"] = False
+            elif is_ancestor(repo, rem_sha, target_sha):
+                res["stale_vs_remote"] = False
+                res["ahead_of_remote"] = True
+            else:
+                res["stale_vs_remote"] = True
+                print(
+                    f"WARNING: Indexed {args.ref} ({target_sha[:10]}) is behind or diverged from {args.remote}/main ({rem_sha[:10]}). "
+                    f"Re-run with `--fetch` to sync against live remote!",
+                    file=sys.stderr,
+                )
     print(json.dumps(res, indent=2))
     return 0
 
@@ -883,7 +905,13 @@ def cmd_stats(args: argparse.Namespace) -> int:
         rem_sha = check_remote_main(check_repo, args.remote)
         if rem_sha:
             out["remote_main"] = rem_sha[:10]
-            out["stale_vs_remote"] = rem_sha != commit
+            if rem_sha == commit:
+                out["stale_vs_remote"] = False
+            elif commit and is_ancestor(check_repo, rem_sha, commit):
+                out["stale_vs_remote"] = False
+                out["ahead_of_remote"] = True
+            else:
+                out["stale_vs_remote"] = True
     print(json.dumps(out, indent=2))
     return 0
 

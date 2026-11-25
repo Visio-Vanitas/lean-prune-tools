@@ -147,7 +147,30 @@ class TestLeanSyntaxAndLoader(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertEqual(ls.parse_lakefile_roots(toml_repo), {"CoreLib", "CoreLib.Extra", "AppEntry"})
+            self.assertEqual(ls.resolve_roots(toml_repo, None), {"CoreLib", "CoreLib.Extra", "AppEntry"})
             self.assertEqual(ls.resolve_roots(toml_repo, "CustomA,CustomB"), {"CustomA", "CustomB"})
+
+            toml_srcdir_repo = root / "toml_srcdir_repo"
+            toml_srcdir_repo.mkdir()
+            (toml_srcdir_repo / "lakefile.toml").write_text(
+                "\n".join(
+                    [
+                        'srcDir = "src"',
+                        "[[lean_lib]]",
+                        'name = "Main"',
+                        'roots = ["Statements", "Main"]',
+                        "[[lean_exe]]",
+                        'name = "in_tree_cli"',
+                        'root = "InTreeCli"',
+                        "[[lean_exe]]",
+                        'name = "cache"',
+                        'root = "scripts.Cache"',
+                        'srcDir = ".."',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(ls.parse_lakefile_roots(toml_srcdir_repo), {"Statements", "Main", "InTreeCli"})
 
             lean_repo = root / "lean_repo"
             lean_repo.mkdir()

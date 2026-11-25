@@ -199,8 +199,14 @@ def parse_lean_imports(text: str) -> list[ImportSpec]:
 
 LAKEFILE_ROOTS_RE = re.compile(r"^roots\s*=\s*\[(.*?)\]", re.MULTILINE | re.DOTALL)
 LAKEFILE_ROOT_RE = re.compile(r'^root\s*=\s*"([^"]+)"', re.MULTILINE)
+LAKEFILE_SRCDIR_RE = re.compile(r'^\s*srcDir\s*=\s*"([^"]+)"', re.MULTILINE)
+TOML_SECTION_SPLIT_RE = re.compile(r"(?m)^(?=\[\[?[^\]]+\]\]?)")
 LAKEFILE_LEAN_ROOTS_RE = re.compile(r"roots\s*:=\s*#\[(.*?)\]", re.DOTALL)
 LAKEFILE_LEAN_ROOT_RE = re.compile(r'root\s*:=\s*(?:`([A-Za-z0-9_.]+)|"([^"]+)")')
+
+
+def _strip_toml_comments(txt: str) -> str:
+    return "\n".join(line for line in txt.splitlines() if not line.lstrip().startswith("#"))
 
 
 def parse_lakefile_roots(repo: Path) -> set[str]:
@@ -208,10 +214,27 @@ def parse_lakefile_roots(repo: Path) -> set[str]:
     roots: set[str] = set()
     toml_path = repo / "lakefile.toml"
     if toml_path.is_file():
-        txt = toml_path.read_text(encoding="utf-8", errors="replace")
-        for block in LAKEFILE_ROOTS_RE.findall(txt):
-            roots.update(re.findall(r'"([^"]+)"', block))
-        roots.update(LAKEFILE_ROOT_RE.findall(txt))
+        txt = _strip_toml_comments(toml_path.read_text(encoding="utf-8", errors="replace"))
+        sections = TOML_SECTION_SPLIT_RE.split(txt)
+        pkg_src_dir: str | None = None
+        if sections and not sections[0].lstrip().startswith("["):
+            m_pkg_dir = LAKEFILE_SRCDIR_RE.search(sections[0])
+            if m_pkg_dir:
+                pkg_src_dir = m_pkg_dir.group(1)
+        for sec in sections:
+            is_table = sec.lstrip().startswith("[")
+            if is_table:
+                m_sec_dir = LAKEFILE_SRCDIR_RE.search(sec)
+                if m_sec_dir:
+                    sec_src = m_sec_dir.group(1)
+                    if sec_src.startswith("..") or (
+                        pkg_src_dir is not None
+                        and Path(sec_src).as_posix().strip("./") != Path(pkg_src_dir).as_posix().strip("./")
+                    ):
+                        continue
+            for block in LAKEFILE_ROOTS_RE.findall(sec):
+                roots.update(re.findall(r'"([^"]+)"', block))
+            roots.update(LAKEFILE_ROOT_RE.findall(sec))
 
     lean_path = repo / "lakefile.lean"
     if lean_path.is_file():
@@ -229,7 +252,7 @@ def parse_lakefile_roots(repo: Path) -> set[str]:
     return roots or {"Main"}
 
 
-def resolve_roots(repo: Path, roots_arg: str = "") -> set[str]:
-    if roots_arg.strip():
+def resolve_roots(repo: Path, roots_arg: str | None = "") -> set[str]:
+    if roots_arg and roots_arg.strip():
         return {r.strip() for r in roots_arg.split(",") if r.strip()}
     return parse_lakefile_roots(repo)
